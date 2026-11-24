@@ -1,0 +1,23 @@
+# Render Blueprint — Conecte seu repositório GitHub em https://dashboard.render.com/blueprints
+services:
+  - type: web
+    name: cortaflow-app
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: '*'
+      - key: USE_CELERY
+        value: 'false'
+      - key: ENABLE_YOLO
+        value: 'false'
+      - key: FAIR_USE_MAX_CONCURRENT_JOBS
+        value: '2'
+      - key: FAIR_USE_SOFT_DAILY_LIMIT
+        value: '20'
+      - key: FAIR_USE_RETENTION_HOURS
+        value: '72'

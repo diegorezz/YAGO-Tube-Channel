@@ -1,0 +1,4 @@
+# Dependências opcionais para detecção avançada de ação/rostos com YOLOv5/v8.
+# Instale apenas em servidores com memória suficiente (ou GPU):
+#   pip install -r requirements-ml.txt
+ultralytics>=8.3.0
