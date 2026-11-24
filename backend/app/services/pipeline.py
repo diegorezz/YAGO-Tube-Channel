@@ -12,12 +12,12 @@ from app.db.database import SessionLocal
 from app.db.models import Cut, Job
 from app.schemas import PipelineOptions
 from app.services.analyzer import (
+    analyze_visual_fast,
     detect_high_action,
     loudness_peaks,
     rank_moments,
-    scene_changes,
 )
-from app.services.cutter import FORMAT_SPECS, convert_format, cut_video, extract_thumbnail
+from app.services.cutter import FORMAT_SPECS, cut_and_convert, extract_thumbnail
 from app.services.downloader import download_video, probe_video_metadata
 from app.services.storage import StorageService
 
@@ -148,12 +148,25 @@ def process_job(
             video_path = local_source_path
             video_title = job.video_title or Path(local_source_path).stem
         else:
+            last_dl_pct = [10]
+
+            def _on_dl_progress(frac: float) -> None:
+                pct = 10 + int(frac * 16)
+                if pct >= last_dl_pct[0] + 3:
+                    last_dl_pct[0] = pct
+                    update_job(
+                        "downloading",
+                        pct,
+                        f"Baixando vídeo ({int(frac * 100)}%) em qualidade {options.preferred_quality.upper()}...",
+                    )
+
             update_job("downloading", 10, f"Baixando vídeo em qualidade {options.preferred_quality.upper()}...")
             downloaded = download_video(
                 url=youtube_url,
                 out_path=str(tmp_dir / "source.mp4"),
                 preferred_quality=options.preferred_quality,
                 max_duration_seconds=settings.fair_use_max_video_minutes * 60,
+                progress_hook=_on_dl_progress,
             )
             video_path = downloaded.file_path
             video_title = downloaded.title
@@ -162,25 +175,39 @@ def process_job(
         update_job(
             "analyzing",
             28,
-            "Detectando mudanças de cena (OpenCV)...",
+            "Analisando cenas e movimento (modo rápido por keyframes)...",
             video_title=video_title,
             video_duration=duration,
         )
 
-        # Step 2: Scene Change Detection
-        scene_ts = scene_changes(video_path, threshold=options.scene_threshold)
+        # Step 2 & 3: Single-pass fast scene + motion/action detection
+        def _on_visual_progress(frac: float) -> None:
+            pct = 28 + int(frac * 26)
+            update_job(
+                "analyzing",
+                min(54, pct),
+                f"Analisando cenas e ação ({int(frac * 100)}%)...",
+            )
 
-        # Step 3: Audio Peak Detection
-        update_job("analyzing", 45, f"{len(scene_ts)} cenas detectadas. Analisando picos de áudio (dB)...")
+        scene_ts, action_ts = analyze_visual_fast(
+            video_path,
+            scene_threshold=options.scene_threshold,
+            detect_action=options.use_action_detection and not settings.enable_yolo,
+            duration=duration,
+            on_progress=_on_visual_progress,
+        )
+
+        # Step 4: Streaming Audio Peak Detection (<1 MB RAM)
+        update_job("analyzing", 56, f"{len(scene_ts)} cenas detectadas. Analisando picos de áudio (dB)...")
         audio_ts = loudness_peaks(video_path, db_threshold=options.audio_db_threshold)
 
-        # Step 4: Action / Facial Detection
-        action_ts: List[float] = []
-        if options.use_action_detection:
-            update_job("analyzing", 60, f"{len(audio_ts)} picos de áudio encontrados. Detectando alta ação...")
+        # Optional heavy YOLO detection only when explicitly enabled via ENABLE_YOLO=true
+        if options.use_action_detection and settings.enable_yolo:
+            update_job("analyzing", 64, f"{len(audio_ts)} picos de áudio encontrados. Rodando YOLO...")
             action_ts = detect_high_action(
                 video_path,
                 frame_interval=settings.default_action_frame_interval,
+                use_yolo=True,
             )
 
         # Step 5: Merge & Rank Moments
@@ -214,24 +241,22 @@ def process_job(
         ]
         update_job(
             "cutting",
-            75,
+            74,
             f"Top {len(ranked)} momentos selecionados. Recortando com FFmpeg...",
             moments_json=json.dumps(moments_payload),
         )
 
-        # Step 6 & 7: Cut, Format Conversion & Upload
+        # Step 6 & 7: Single-pass Cut + Format Conversion & Upload
         total_ops = max(1, len(ranked) * len(formats))
         done_ops = 0
 
         for idx, moment in enumerate(ranked):
-            base_cut_path = str(tmp_dir / f"cut_{idx}.mp4")
             actual_duration = max(1.0, moment.end - moment.start)
-            cut_video(video_path, moment.start, actual_duration, base_cut_path)
 
             for fmt in formats:
                 out_path = str(tmp_dir / f"cut_{idx}_{fmt}.mp4")
                 thumb_path = str(tmp_dir / f"cut_{idx}_{fmt}.jpg")
-                convert_format(base_cut_path, out_path, fmt)
+                cut_and_convert(video_path, moment.start, actual_duration, out_path, fmt)
                 try:
                     extract_thumbnail(out_path, thumb_path, at_second=min(1.0, actual_duration / 2))
                 except Exception:
@@ -249,6 +274,11 @@ def process_job(
                 spec_w, spec_h, max_fmt_dur = FORMAT_SPECS[fmt]
                 effective_dur = int(round(min(actual_duration, max_fmt_dur) if max_fmt_dur > 0 else actual_duration))
                 size_bytes = Path(out_path).stat().st_size if Path(out_path).exists() else 0
+
+                # Free temporary cut files immediately to keep disk usage minimal
+                Path(out_path).unlink(missing_ok=True)
+                if thumb_path:
+                    Path(thumb_path).unlink(missing_ok=True)
 
                 cut_row = Cut(
                     id=cut_id,
