@@ -24,6 +24,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# Runtime JS oficial (Deno) exigido pelo yt-dlp para resolver formatos de vídeo/áudio
+COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
+
 WORKDIR /app
 
 COPY backend/requirements.txt ./backend/requirements.txt

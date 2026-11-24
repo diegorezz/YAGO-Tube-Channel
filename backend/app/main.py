@@ -166,6 +166,7 @@ def health_check():
         "worker": "celery" if settings.use_celery else "fastapi-background",
         "yolo_enabled": settings.enable_yolo,
         "ffmpeg_available": shutil.which("ffmpeg") is not None,
+        "js_runtime_available": bool(shutil.which("deno") or shutil.which("node")),
         "cookies_configured": resolve_cookies_file() is not None,
     }
 

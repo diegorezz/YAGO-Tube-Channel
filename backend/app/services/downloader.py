@@ -120,15 +120,15 @@ def download_video(
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     base_stem = str(Path(out_path).with_suffix(""))
 
-    # Map quality preference to yt-dlp format selector (4K when requested/original)
+    # Map quality preference to resilient yt-dlp format selector (4K when requested/original)
     quality_selectors = {
-        "original": "bestvideo+bestaudio/best",
-        "4k": "bestvideo[height<=2160]+bestaudio/best[height<=2160]/best",
-        "1080p": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
-        "720p": "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-        "480p": "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
+        "original": "bv*+ba/b",
+        "4k": "bv*[height<=2160]+ba/b[height<=2160]/bv*+ba/b",
+        "1080p": "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
+        "720p": "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b",
+        "480p": "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b",
     }
-    fmt_selector = quality_selectors.get(preferred_quality, "bestvideo+bestaudio/best")
+    fmt_selector = quality_selectors.get(preferred_quality, "bv*+ba/b")
 
     def _hook(d: dict):
         if progress_hook and d.get("status") == "downloading":
@@ -144,6 +144,7 @@ def download_video(
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "js_runtimes": {"deno": {"path": None}, "node": {"path": None}},
         "progress_hooks": [_hook],
     }
 
