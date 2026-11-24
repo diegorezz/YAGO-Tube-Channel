@@ -39,6 +39,7 @@ from app.schemas import (
     ResolutionType,
 )
 from app.services.cutter import transcode_resolution
+from app.services.downloader import resolve_cookies_file
 from app.services.fair_use import get_fair_use_status
 from app.services.pipeline import process_job, serialize_cut, ws_manager
 from app.services.storage import StorageService
@@ -165,6 +166,7 @@ def health_check():
         "worker": "celery" if settings.use_celery else "fastapi-background",
         "yolo_enabled": settings.enable_yolo,
         "ffmpeg_available": shutil.which("ffmpeg") is not None,
+        "cookies_configured": resolve_cookies_file() is not None,
     }
 
 

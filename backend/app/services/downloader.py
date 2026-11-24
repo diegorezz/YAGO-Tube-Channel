@@ -89,6 +89,20 @@ def download_generic_url(url: str, out_path: str) -> DownloadedVideo:
     )
 
 
+def resolve_cookies_file() -> Optional[Path]:
+    """Return path to user-provided yt-dlp cookies file if configured and present."""
+    settings = get_settings()
+    candidates = []
+    if settings.ytdlp_cookies_file.strip():
+        candidates.append(Path(settings.ytdlp_cookies_file.strip()))
+    candidates.append(Path("/etc/secrets/cookies.txt"))
+
+    for path in candidates:
+        if path.is_file() and path.stat().st_size > 0:
+            return path
+    return None
+
+
 def download_video(
     url: str,
     out_path: str,
@@ -132,6 +146,13 @@ def download_video(
         "noplaylist": True,
         "progress_hooks": [_hook],
     }
+
+    cookies_src = resolve_cookies_file()
+    if cookies_src is not None:
+        # Copy to job temp dir so read-only secret mounts (e.g. /etc/secrets/cookies.txt) remain writable for yt-dlp
+        writable_cookies = Path(out_path).parent / "cookies.txt"
+        shutil.copyfile(cookies_src, writable_cookies)
+        ydl_opts["cookiefile"] = str(writable_cookies)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
