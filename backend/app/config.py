@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     default_audio_db_threshold: float = -20.0
     default_action_frame_interval: int = 30
 
+    # Optional yt-dlp cookies file path (e.g., Render Secret File /etc/secrets/cookies.txt)
+    ytdlp_cookies_file: str = ""
+
     # Fair-Use Policy (Unlimited Free Tier with cost-management safeguards)
     fair_use_max_concurrent_jobs: int = 2
     fair_use_soft_daily_limit: int = 20

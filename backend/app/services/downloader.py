@@ -1,5 +1,6 @@
 import json
 import logging
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import yt_dlp
+
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
