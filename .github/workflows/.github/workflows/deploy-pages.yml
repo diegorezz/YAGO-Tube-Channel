@@ -25,17 +25,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Instalar dependências do Frontend
         working-directory: frontend
-        run: npm ci
+        run: npm install
 
       - name: Build de Produção (Vite)
         working-directory: frontend
         env:
-          # Opcional: defina VITE_API_URL em Settings -> Variables -> Actions no GitHub
           VITE_API_URL: ${{ vars.VITE_API_URL || '' }}
           VITE_BASE_PATH: './'
         run: npm run build
